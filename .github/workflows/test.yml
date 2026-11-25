@@ -1,0 +1,25 @@
+name: Test
+
+# Runs on every proposed change (pull request) and on main.
+# Checks the code parses and runs the storage/adapter tests against a local Azure storage emulator.
+on:
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Start storage emulator
+        run: npx azurite-blob --silent --location /tmp/azdata --blobPort 10000 --skipApiVersionCheck &
+      - name: Wait for emulator
+        run: for i in $(seq 1 30); do (exec 3<>/dev/tcp/127.0.0.1/10000) 2>/dev/null && exit 0; sleep 1; done; exit 1
+      - run: npm test

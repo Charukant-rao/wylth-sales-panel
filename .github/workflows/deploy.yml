@@ -1,0 +1,53 @@
+name: Deploy to Azure
+
+# Goes live only after Charukant approves:
+#  1. Changes reach main only through a pull request that Charukant merges.
+#  2. The deploy job runs only when Charukant is the one who merged/pushed (or started it by hand).
+#  3. The "production" environment can additionally require Charukant to click "Approve" before deploying.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  deploy:
+    needs: test
+    if: github.actor == 'Charukant-rao'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://salespanel.wylth.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install runtime packages only
+        run: npm ci --omit=dev
+      - name: Build deploy package
+        run: zip -qr app.zip host.json package.json src node_modules
+      - name: Deploy
+        uses: Azure/functions-action@v1
+        with:
+          app-name: Wylth-ghl-SubApps
+          package: app.zip
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+          sku: flexconsumption
+      - name: Check the live panel
+        run: |
+          for i in $(seq 1 12); do
+            body=$(curl -s https://salespanel.wylth.com/__health || true)
+            echo "$body"
+            echo "$body" | grep -q '"ok":true' && exit 0
+            sleep 10
+          done
+          echo "Live panel did not answer after deploy"; exit 1

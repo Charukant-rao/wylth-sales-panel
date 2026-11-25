@@ -1,0 +1,8 @@
+node_modules/
+*.zip
+.env
+local.settings.json
+__azurite*
+__blobstorage__/
+__queuestorage__/
+azdata/
