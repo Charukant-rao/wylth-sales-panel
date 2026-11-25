@@ -95,7 +95,14 @@ export async function msCallback(env, url, headers) {
 
   const email = String(id.email || id.preferred_username || "").toLowerCase();
   let users; try { users = await ghlUsers(env); } catch { return fail(st.app, "Could not reach GHL to check your account. Please try again."); }
-  const u = email && users.find(x => x.email === email);
+  let u = email && users.find(x => x.email === email);
+  if (!u && email && env.PANEL_KV) {
+    // Agency-level GHL users (e.g. admins) are not in the location's user list; the panel records them in its
+    // own config the first time they open it from GHL (users[email].id). Accept those too, unless switched off.
+    const cfg = await env.PANEL_KV.get(st.app === "engage" ? "cfg:engage" : "cfg", "json").catch(() => null);
+    const c = cfg && cfg.users && cfg.users[email];
+    if (c && c.id && c.active !== false) u = { id: c.id, email, name: c.name || "" };
+  }
   if (!u) return fail(st.app, "Your Microsoft account (" + (email || "no email") + ") does not match a GHL user. Open the panel from the GHL left menu instead.");
   const token = await panelSession(env, { app: st.app, sub: u.id, email: u.email, name: u.name || id.name });
   return redirect(appPath(st.app) + "#s=" + encodeURIComponent(token), clearCookie);

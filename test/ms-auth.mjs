@@ -65,6 +65,17 @@ async function finish(cookie, state, extra = "") {
   let { loc, cookie } = await startLogin();
   let r = await finish(cookie, loc.searchParams.get("state"));
   ok(r.headers.location.startsWith("/#ms_error=") && /does%20not%20match%20a%20GHL%20user/.test(r.headers.location), "Microsoft account with no GHL user is refused");
+  // Agency-level user: not in the location list, but recorded in the panel config from an earlier GHL sign-in
+  env.PANEL_KV = { async get(k) { return k === "cfg" ? { users: { "agency.admin@example.com": { id: "ghl-agency1", name: "Agency Admin", role: "admin" }, "off@example.com": { id: "ghl-off", active: false } } } : null; }, async put() {} };
+  idOverride = { preferred_username: "Agency.Admin@example.com" };
+  ({ loc, cookie } = await startLogin()); r = await finish(cookie, loc.searchParams.get("state"));
+  const ag = r.headers.location.startsWith("/#s=") && JSON.parse(Buffer.from(decodeURIComponent(r.headers.location.split("#s=")[1]).split(".")[0], "base64url").toString());
+  ok(ag && ag.sub === "ghl-agency1", "agency-level user known to the panel is accepted");
+  idOverride = { preferred_username: "off@example.com" };
+  ({ loc, cookie } = await startLogin()); r = await finish(cookie, loc.searchParams.get("state"));
+  ok(r.headers.location.startsWith("/#ms_error="), "panel user switched off is refused");
+  ({ loc, cookie } = await startLogin("engage")); idOverride = { preferred_username: "agency.admin@example.com" }; r = await finish(cookie, loc.searchParams.get("state"));
+  ok(r.headers.location.startsWith("/engage#ms_error="), "Engage checks its own user list, not the Sales one");
   idOverride = { preferred_username: "gone@example.com" };
   ({ loc, cookie } = await startLogin()); r = await finish(cookie, loc.searchParams.get("state"));
   ok(r.headers.location.startsWith("/#ms_error="), "deleted GHL user is refused");
