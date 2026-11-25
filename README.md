@@ -9,8 +9,8 @@ The GHL left-menu panels **Sales Panel** and **Engagement & Cross-sell**, runnin
 
 1. Make a branch, change the code, open a **pull request** into `main`.
 2. The **Test** workflow runs automatically (syntax check + storage/adapter tests).
-3. **Charukant reviews and merges** the pull request. Nothing reaches `main` any other way.
-4. The **Deploy to Azure** workflow then runs. It deploys only when Charukant merged or started it, and if the `production` environment has a required reviewer, it waits for Charukant's **Approve** click.
+3. **Charukant reviews and approves** the pull request, then it is merged. `main` is protected: no direct pushes, no force pushes, one approving review required.
+4. The **Deploy to Azure** workflow starts and **waits** in the `production` environment. GitHub emails Charukant; open the run under **Actions** and click **Review deployments → Approve and deploy**.
 5. After deploying it checks `/__health` on the live site.
 
 To roll back: revert the pull request (GitHub's "Revert" button), and Charukant merges the revert.
