@@ -1,9 +1,8 @@
 name: Deploy to Azure
 
 # Goes live only after Charukant approves:
-#  1. Changes reach main only through a pull request that Charukant merges.
-#  2. The deploy job runs only when Charukant is the one who merged/pushed (or started it by hand).
-#  3. The "production" environment can additionally require Charukant to click "Approve" before deploying.
+#  1. main is protected: changes arrive only through a pull request with an approving review.
+#  2. Every deploy waits in the "production" environment until Charukant clicks "Approve and deploy".
 on:
   push:
     branches: [main]
@@ -19,15 +18,14 @@ jobs:
 
   deploy:
     needs: test
-    if: github.actor == 'Charukant-rao'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
       name: production
       url: https://salespanel.wylth.com
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
