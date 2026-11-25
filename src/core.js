@@ -4,6 +4,7 @@
 // - sync: the 5-minute lead snapshot sync, plus an optional mirror of the old Cloudflare data during the move
 import zlib from "node:zlib";
 import worker from "./worker.js";
+import { msLogin, msCallback } from "./ms-auth.js";
 
 export function blobStore(container) {
   const name = k => encodeURIComponent(k);
@@ -44,6 +45,8 @@ const ZIP = /json|text|javascript|svg/;
 export async function handle(env, method, url, headers, bodyBuf) {
   const u = new URL(url);
   if (u.pathname === "/__mirror") return mirrorRoute(env);
+  if (u.pathname === "/auth/ms/login" && method === "GET") return msLogin(env, u);
+  if (u.pathname === "/auth/ms/callback" && method === "GET") return msCallback(env, u, headers);
   if (u.pathname === "/__health") { // counts and times only, no panel data
     const m = await env.PANEL_KV.get("snap:v1", "json").catch(() => null), b = await env.PANEL_KV.get("snapb:v1", "text").catch(() => null);
     let prog = null; if (b) { try { const x = JSON.parse(b); prog = { rows: (x.rows || []).length, pipeline: (x.pi || 0) + "/" + ((x.pls || []).length) }; } catch { prog = "unreadable"; } }
