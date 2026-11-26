@@ -31,6 +31,8 @@ Azure tweaks inside `src/worker.js`: the snapshot page count reads `SNAP_STEP` f
 
 `GHL_API_TOKEN`, `GHL_LOCATION_ID`, `GHL_SSO_KEY`, `GHL_SSO_KEY_ENGAGE`, `SNAP_STEP` (100), `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` (Microsoft sign-in, see below), `AzureWebJobsStorage` (data lives in storage account `webappprod01`, container `panelkv`). Secrets are never committed here.
 
+**Daily call scorecard feed (optional settings):** `SCORECARD_FEED_KEY` (a long random string, 16+ characters) and `SCORECARD_ADMIN_EMAIL` (the work email of a panel admin). With both set, the daily report job can `POST https://salespanel.wylth.com/api/feed/scorecard` with header `X-Feed-Key: <key>` and JSON `{date, reps:[...], feedback:[...]}` (same shape as the file the admin 'Import scorecard' button takes). It lands in the Call analysis tab, each RM sees their own row. Without these settings the route answers 401.
+
 ## Signing in
 
 - **Inside GHL** (left menu): GHL's own sign-in, as before. The **Open in new tab ↗** button opens the same session in a browser tab.

@@ -50,4 +50,12 @@ ok(r.status === 400, "Not interested needs a reason", r.status + " " + (r.body.e
 updates = [];
 r = await act(tokR, { action: "call", id: "o1", outcome: "Not interested", note: "Happy with current software" });
 ok(r.status === 200 && r.body.pooled === true && updates.some(u => u.body.assignedTo === ""), "Not interested with a reason returns the lead to the pool", r.status + " " + JSON.stringify(updates.map(u => Object.keys(u.body))));
+// Feed route used by the daily report job
+const { handle } = await import(repo + "/src/core.js?" + Date.now());
+env.SCORECARD_FEED_KEY = "feed-key-feed-key-1234"; env.SCORECARD_ADMIN_EMAIL = "admin@example.com";
+const feed = async (key, b) => { const h = new Headers({ "content-type": "application/json" }); if (key) h.set("x-feed-key", key); const o = await handle(env, "POST", "https://p/api/feed/scorecard", h, Buffer.from(JSON.stringify(b))); return { status: o.status, body: JSON.parse(o.body.toString() || "{}") }; };
+const day = { date: "2026-11-26", reps: [{ person: "Sharukh", recordings: 4, conversations: 3, talk_min: 6, flags: 0, opening: 3, discovery: 2, pitch_clarity: 2, objection_handling: 3, close_next_steps: 2, avg_score: 2.4 }], feedback: [] };
+r = await feed("", day); ok(r.status === 401, "feed without a key is refused", r.status);
+r = await feed("wrong-key-wrong-key-1234", day); ok(r.status === 401, "feed with a wrong key is refused", r.status);
+r = await feed("feed-key-feed-key-1234", day); ok(r.status === 200 && r.body.imported === 1, "feed with the key imports the day", r.status + " " + JSON.stringify(r.body));
 console.log(fail ? "FAILED " + fail : "all " + pass + " passed"); process.exit(fail ? 1 : 0);

@@ -3,8 +3,9 @@
 // - handle: turns an Azure HTTP request into a web Request for the panel and back, with gzip
 // - sync: the 5-minute lead snapshot sync, plus an optional mirror of the old Cloudflare data during the move
 import zlib from "node:zlib";
+import { timingSafeEqual } from "node:crypto";
 import worker from "./worker.js";
-import { msLogin, msCallback } from "./ms-auth.js";
+import { msLogin, msCallback, sessionForEmail } from "./ms-auth.js";
 
 export function blobStore(container) {
   const name = k => encodeURIComponent(k);
@@ -41,6 +42,20 @@ export function makeEnv(store) {
   return Object.assign({}, process.env, { PANEL_KV: store, SNAP_STEP: process.env.SNAP_STEP || "100" });
 }
 
+// Daily call scorecard pushed in by the report job: POST /api/feed/scorecard with header X-Feed-Key (app setting SCORECARD_FEED_KEY).
+// Body: { date, reps:[...], feedback:[...] }. It runs as the GHL user named by SCORECARD_ADMIN_EMAIL (must be a panel admin).
+const jsonOut = (status, o) => ({ status, headers: { "content-type": "application/json", "cache-control": "no-store" }, body: Buffer.from(JSON.stringify(o)) });
+async function scorecardFeed(env, u, headers, bodyBuf) {
+  const key = env.SCORECARD_FEED_KEY || "", got = String((headers.get ? headers.get("x-feed-key") : headers["x-feed-key"]) || "");
+  const a = Buffer.from(got), b = Buffer.from(key);
+  if (key.length < 16 || a.length !== b.length || !timingSafeEqual(a, b)) return jsonOut(401, { error: "Bad or missing feed key." });
+  let body; try { body = JSON.parse(bodyBuf.toString("utf8")); } catch { return jsonOut(400, { error: "Send JSON." }); }
+  const tok = await sessionForEmail(env, "sales", env.SCORECARD_ADMIN_EMAIL).catch(() => null);
+  if (!tok) return jsonOut(500, { error: "SCORECARD_ADMIN_EMAIL is not set or does not match a GHL user." });
+  const r = await worker.fetch(new Request(u.origin + "/api/action", { method: "POST", headers: { "content-type": "application/json", "X-Panel-Session": tok }, body: JSON.stringify({ ...body, action: "scorecard" }) }), env, { waitUntil() {}, passThroughOnException() {} });
+  return { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" }, body: Buffer.from(await r.arrayBuffer()) };
+}
+
 const ZIP = /json|text|javascript|svg/;
 export async function handle(env, method, url, headers, bodyBuf) {
   const u = new URL(url);
@@ -54,6 +69,7 @@ export async function handle(env, method, url, headers, bodyBuf) {
     const o = { ok: true, now: new Date().toISOString(), snapshot: m ? { leads: m.n, syncedAt: new Date(m.at).toISOString(), fullBuild: m.full } : null, building: !!b, progress: prog, lastSync: dg ? Object.assign({}, dg, { at: new Date(dg.at).toISOString() }) : null, mirroring: !!env.MIGRATE_FROM, lastMirror: lastMirror ? new Date(lastMirror).toISOString() : null };
     return { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" }, body: Buffer.from(JSON.stringify(o)) };
   }
+  if (u.pathname === "/api/feed/scorecard" && method === "POST") return scorecardFeed(env, u, headers, bodyBuf);
   const init = { method, headers };
   if (!["GET", "HEAD"].includes(method) && bodyBuf && bodyBuf.length) init.body = bodyBuf;
   const r = await worker.fetch(new Request(url, init), env, { waitUntil() {}, passThroughOnException() {} });
