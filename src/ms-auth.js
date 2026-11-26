@@ -101,4 +101,11 @@ export async function msCallback(env, url, headers) {
   return redirect(appPath(st.app) + "#s=" + encodeURIComponent(token), clearCookie);
 }
 
+// A session for a named GHL user, used by the scorecard feed (src/core.js) so it runs with that user's rights.
+export async function sessionForEmail(env, app, email) {
+  const e = String(email || "").toLowerCase(); if (!e) return null;
+  const u = (await ghlUsers(env)).find(x => x.email === e);
+  return u ? panelSession(env, { app, sub: u.id, email: u.email, name: u.name }) : null;
+}
+
 export function resetUsersMemo() { usersMemo = { at: 0, list: null }; }
