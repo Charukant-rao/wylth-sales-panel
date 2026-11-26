@@ -59,4 +59,19 @@ reset(); r = await add({ name: "New Partner", phone: "+919800000055", arn: "ARN-
 ok(r.status === 200 && opps.length === 2, "a genuinely new lead is added", r.status + " " + JSON.stringify(r.body).slice(0, 120));
 reset(); opps[0].status = "lost"; r = await add({ name: "Existing Partner", phone: "+919800000001" });
 ok(r.status === 200, "a lost lead can be added again", r.status + " " + (r.body.error || ""));
+// Claim by ARN (MFD list): same rule, nothing in GHL changes when the claim is refused
+async function act(body) {
+  const r = await worker.fetch(new Request("https://p/api/action", { method: "POST", headers: { "content-type": "application/json", "X-Panel-Session": tok }, body: JSON.stringify(body) }), env, { waitUntil() {} });
+  return { status: r.status, body: await r.json().catch(() => ({})) };
+}
+reset(); kv.set("mfd:22", JSON.stringify({ "222": { name: "Typed From MFD List", phone: "+919800000001", email: "", city: "Pune" } }));
+r = await act({ action: "arnclaim", arn: "222", main: "222" });
+ok(r.status === 409, "MFD claim for a contact already held by another RM is refused", r.status + " " + (r.body.error || ""));
+ok(contacts[0].name === "Existing Partner" && contacts.length === 1 && opps.length === 1, "refused MFD claim leaves GHL untouched", contacts[0].name + ", " + contacts.length + " contacts");
+reset(); kv.set("mfd:33", JSON.stringify({ "333": { name: "New Mfd", phone: "+919800000077", email: "", city: "Pune" } }));
+r = await act({ action: "arnclaim", arn: "333", main: "333" });
+ok(r.status === 200 && opps.length === 2 && opps[1].assignedTo === "u-rm1", "free MFD ARN is claimed by the RM", r.status + " " + (r.body.error || ""));
+reset(); opps[0].name = "ARN-444"; opps[0].updatedAt = new Date().toISOString();
+r = await act({ action: "arnlookup", arn: "444" });
+ok(r.status === 200 && r.body.found && !r.body.phone, "lookup of another RM's lead does not reveal its phone", JSON.stringify(r.body).slice(0, 120));
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
