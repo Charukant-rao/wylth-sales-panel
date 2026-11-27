@@ -73,6 +73,15 @@ ok(r.status === 200 && r.body.date === "2026-11-26" && r.body.data.reps.length =
 r = await act(tokR, { action: "scget" });
 ok(r.status === 200 && r.body.mine === true && r.body.data.reps.length === 1 && r.body.data.reps[0].uid === "u-rm1" && r.body.data.feedback.length === 1 && r.body.data.concerns.length === 0 && r.body.data.rep_history.length === 1, "an RM gets only their own rows and no team sections", JSON.stringify(r.body.data || {}).slice(0, 200));
 
+// Sold clients from the Onboarding sheet keep their own date and instalments
+r = await act(tokR, { action: "soldimport", id: "o1", total: 11800, pays: [{ d: "2026-06-01", a: 5900 }] });
+ok(r.status === 403, "an RM cannot import sold clients", r.status);
+updates = [];
+r = await act(tokA, { action: "soldimport", id: "o1", total: 11800, date: "2026-04-02", products: "Platform, Wylth AI", rm: "u-rm2", pays: [{ d: "2026-06-01", a: 5900, note: "UPI" }, { d: "2026-04-02", a: 5900 }] });
+ok(r.status === 200 && r.body.sold.date === "2026-04-02" && r.body.pay.paid === 11800 && r.body.pay.hist.length === 2 && r.body.pay.hist[0].d === "2026-04-02", "sold import keeps the onboarding date and each instalment date", r.status + " " + JSON.stringify(r.body).slice(0, 220));
+ok(updates.some(u => u.body.status === "won" && u.body.monetaryValue === 11800 && u.body.assignedTo === "u-rm2"), "the lead is marked won for the full amount and given to the sheet RM", JSON.stringify(updates.map(u => u.body.status)));
+ok(JSON.parse(kv.get("cfg")).soldDates.o1 === "2026-04-02" && JSON.parse(kv.get("cfg")).users["admin@example.com"].role === "admin", "the sold date is saved and the rest of the config is kept", kv.get("cfg").slice(0, 160));
+
 // Feed route used by the daily report job
 const { handle } = await import(repo + "/src/core.js?" + Date.now());
 env.SCORECARD_FEED_KEY = "feed-key-feed-key-1234"; env.SCORECARD_ADMIN_EMAIL = "admin@example.com";
