@@ -6,6 +6,7 @@ import zlib from "node:zlib";
 import { timingSafeEqual } from "node:crypto";
 import worker from "./worker.js";
 import { msLogin, msCallback, sessionForEmail } from "./ms-auth.js";
+import { peLookup } from "./pe-tracker.js";
 
 export function blobStore(container) {
   const name = k => encodeURIComponent(k);
@@ -39,7 +40,9 @@ export function blobStore(container) {
 }
 
 export function makeEnv(store) {
-  return Object.assign({}, process.env, { PANEL_KV: store, SNAP_STEP: process.env.SNAP_STEP || "100" });
+  const env = Object.assign({}, process.env, { PANEL_KV: store, SNAP_STEP: process.env.SNAP_STEP || "100" });
+  env.PE_LOOKUP = arn => peLookup(env, arn); // Partner Engagement tracker in Azure Blob → RM mapping by ARN
+  return env;
 }
 
 // Daily call scorecard pushed in by the report job: POST /api/feed/scorecard with header X-Feed-Key (app setting SCORECARD_FEED_KEY).

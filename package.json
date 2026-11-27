@@ -8,8 +8,8 @@
     "@azure/storage-blob": "^12.26.0"
   },
   "scripts": {
-    "check": "node --check src/worker.js && node --check src/core.js && node --check src/index.js && node --check src/ms-auth.js",
-    "test": "node test/local.mjs && node test/ms-auth.mjs && node test/duplicate-guard.mjs && node test/scorecard.mjs"
+    "check": "node --check src/worker.js && node --check src/core.js && node --check src/index.js && node --check src/ms-auth.js && node --check src/pe-tracker.js",
+    "test": "node test/local.mjs && node test/ms-auth.mjs && node test/duplicate-guard.mjs && node test/scorecard.mjs && node test/pe-tracker.mjs"
   },
   "devDependencies": {
     "azurite": "^3.33.0"
