@@ -82,6 +82,29 @@ ok(r.status === 200 && r.body.sold.date === "2026-04-02" && r.body.pay.paid === 
 ok(updates.some(u => u.body.status === "won" && u.body.monetaryValue === 11800 && u.body.assignedTo === "u-rm2"), "the lead is marked won for the full amount and given to the sheet RM", JSON.stringify(updates.map(u => u.body.status)));
 ok(JSON.parse(kv.get("cfg")).soldDates.o1 === "2026-04-02" && JSON.parse(kv.get("cfg")).users["admin@example.com"].role === "admin", "the sold date is saved and the rest of the config is kept", kv.get("cfg").slice(0, 160));
 
+// Live MIS: demo events, targets and follow-up reminders
+r = await act(tokR, { action: "call", id: "o1", outcome: "Demo booked", note: "" });
+ok(r.status === 400, "a booked demo needs the demo date", r.status);
+r = await act(tokR, { action: "call", id: "o1", outcome: "Demo booked", note: "Wants a live demo", followup: "2026-12-02" });
+ok(r.status === 200, "a call can be logged as Demo booked", r.status + " " + (r.body.error || ""));
+r = await act(tokR, { action: "status", id: "o1", status: "demo" });
+ok(r.status === 200, "status can be set to Demo done", r.status + " " + (r.body.error || ""));
+const evk = [...kv.keys()].find(k => k.startsWith("ev:"));
+const evs = evk ? JSON.parse(kv.get(evk)) : [];
+ok(evs.some(x => x.t === "booked" && x.on === "2026-12-02") && evs.some(x => x.t === "demo") && evs.some(x => x.t === "call"), "calls, booked demos and done demos are recorded", JSON.stringify(evs.map(x => x.t)));
+r = await act(tokR, { action: "misbase", month: "2026-11", rows: [] });
+ok(r.status === 403, "an RM cannot set MIS targets", r.status);
+r = await act(tokA, { action: "misbase", month: evk.slice(3, 10), asOf: "2026-11-26", holidays: ["2026-11-10"], monthDays: 20, rows: [{ person: "Mudassir Ali", dM: 15, target: 10, committed: 200000 }, { person: "Nobody", dM: 1 }] });
+ok(r.status === 200 && r.body.matched === 1 && r.body.unmatched.length === 1, "admin sets targets and the tracker baseline", JSON.stringify(r.body));
+r = await act(tokR, { action: "events", month: evk.slice(3, 10) });
+ok(r.status === 200 && r.body.events.length === evs.length && r.body.base.rows["u-rm1"].target === 10, "an RM gets their own events and target", JSON.stringify(r.body).slice(0, 200));
+r = await act(tokR, { action: "nudge", id: "o1", text: "x" });
+ok(r.status === 403, "an RM cannot send follow-up reminders", r.status);
+updates = [];
+r = await act(tokA, { action: "nudge", id: "o1", due: "2026-12-05", text: "Send the quotation" });
+const nf = JSON.parse(kv.get("notif:u-rm1") || kv.get("notif:u-rm2") || "[]");
+ok(r.status === 200 && r.body.next === "2026-12-05" && nf.some(n => /follow up/.test(n.text)), "admin reminder notifies the RM and sets the follow-up", r.status + " " + JSON.stringify(nf).slice(0, 160));
+
 // Feed route used by the daily report job
 const { handle } = await import(repo + "/src/core.js?" + Date.now());
 env.SCORECARD_FEED_KEY = "feed-key-feed-key-1234"; env.SCORECARD_ADMIN_EMAIL = "admin@example.com";
