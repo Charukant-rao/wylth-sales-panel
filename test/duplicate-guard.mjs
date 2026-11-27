@@ -74,4 +74,19 @@ ok(r.status === 200 && opps.length === 2 && opps[1].assignedTo === "u-rm1", "fre
 reset(); opps[0].name = "ARN-444"; opps[0].updatedAt = new Date().toISOString();
 r = await act({ action: "arnlookup", arn: "444" });
 ok(r.status === 200 && r.body.found && !r.body.phone, "lookup of another RM's lead does not reveal its phone", JSON.stringify(r.body).slice(0, 120));
+// Map by ARN from the lead pool: typed details, mapping to another RM
+reset(); r = await act({ action: "arnclaim", arn: "555", name: "Typed Partner" });
+ok(r.status === 404, "an unknown ARN without a phone or email is refused", r.status + " " + (r.body.error || ""));
+reset(); r = await act({ action: "arnclaim", arn: "555", name: "Typed Partner", phone: "+919800000088", city: "Indore" });
+ok(r.status === 200 && opps.length === 2 && opps[1].assignedTo === "u-rm1" && contacts.some(c => c.name === "Typed Partner"), "an unknown ARN is added with the typed details", r.status + " " + (r.body.error || ""));
+reset(); r = await act({ action: "arnclaim", arn: "556", name: "For Someone Else", phone: "+919800000089", to: "u-rm2" });
+ok(r.status === 200 && opps[1].assignedTo === "u-rm1", "an RM cannot map a lead to someone else (it stays with them)", r.status + " " + (opps[1] && opps[1].assignedTo));
+kv.set("cfg", JSON.stringify({ users: { "admin@example.com": { role: "admin" } } }));
+const tokA = await panelSession(env, { app: "sales", sub: "u-admin", email: "admin@example.com", name: "Admin" });
+async function actA(body) { const r2 = await worker.fetch(new Request("https://p/api/action", { method: "POST", headers: { "content-type": "application/json", "X-Panel-Session": tokA }, body: JSON.stringify(body) }), env, { waitUntil() {} }); return { status: r2.status, body: await r2.json().catch(() => ({})) }; }
+reset(); kv.set("mfd:77", JSON.stringify({ "777": { name: "Mfd For Rm Two", phone: "+919800000090", email: "x@example.com", city: "Pune" } }));
+r = await actA({ action: "arnlookup", arn: "777" });
+ok(r.status === 200 && r.body.pool && r.body.email === "x@example.com" && r.body.city === "Pune", "lookup returns name, phone, email and city to fill the form", JSON.stringify(r.body).slice(0, 160));
+r = await actA({ action: "arnclaim", arn: "777", to: "u-rm2" });
+ok(r.status === 200 && opps[1].assignedTo === "u-rm2" && /mapped to you by Admin/.test(kv.get("notif:u-rm2") || ""), "admin maps an MFD ARN to an RM, who is notified", r.status + " " + (r.body.error || "") + " " + (opps[1] && opps[1].assignedTo));
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
