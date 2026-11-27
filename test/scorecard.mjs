@@ -61,6 +61,18 @@ const d24 = st2.find(c => c.date === "2026-11-24");
 ok(d24 && d24.rating === 8.4 && d24.band === "Strong" && d24.low === true, "rating, band and few-calls flag are kept", JSON.stringify(d24 || {}).slice(0, 200));
 ok(st2.some(c => c.date === "2026-11-21" && c.rating === 7.2), "a weekend range is stored under its first day");
 
+// Full day bundle in the artifact's format, and what each person gets back
+const bundle = { funnel: [{ stage: "Recordings", calls: 30 }], reps: [{ person: "mudassir", rating: 7.2, band: "Strong", conversations: 4 }, { person: "Sharukh", rating: 4.0, band: "Needs coaching", conversations: 9 }],
+  feedback: [{ person: "mudassir", kind: "Does well", point: "Clear pricing." }, { person: "Sharukh", kind: "Needs improvement", point: "Ask about AUM." }],
+  outcomes: [{ person: "mudassir", outcome: "Demo booked", calls: 1 }], actions: [], concerns: [{ theme: "Price", mentions: 3, handled_weakly: 1 }], flags: [], issues: [], history: [{ date: "2026-11-26", recordings: 30 }],
+  rep_history: [{ date: "2026-11-25", person: "mudassir", rating: 6.1 }, { date: "2026-11-26", person: "Sharukh", rating: 4.0 }] };
+r = await act(tokA, { action: "scorecard", date: "2026-11-26", bundle });
+ok(r.status === 200 && r.body.imported === 2, "a full day bundle imports and also feeds the call rows", r.status + " " + JSON.stringify(r.body));
+r = await act(tokA, { action: "scget" });
+ok(r.status === 200 && r.body.date === "2026-11-26" && r.body.data.reps.length === 2 && r.body.data.concerns.length === 1 && r.body.data.reps.every(x => x.uid), "admin gets the whole day with people matched", JSON.stringify(r.body).slice(0, 200));
+r = await act(tokR, { action: "scget" });
+ok(r.status === 200 && r.body.mine === true && r.body.data.reps.length === 1 && r.body.data.reps[0].uid === "u-rm1" && r.body.data.feedback.length === 1 && r.body.data.concerns.length === 0 && r.body.data.rep_history.length === 1, "an RM gets only their own rows and no team sections", JSON.stringify(r.body.data || {}).slice(0, 200));
+
 // Feed route used by the daily report job
 const { handle } = await import(repo + "/src/core.js?" + Date.now());
 env.SCORECARD_FEED_KEY = "feed-key-feed-key-1234"; env.SCORECARD_ADMIN_EMAIL = "admin@example.com";
