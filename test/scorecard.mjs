@@ -61,6 +61,27 @@ const d24 = st2.find(c => c.date === "2026-11-24");
 ok(d24 && d24.rating === 8.4 && d24.band === "Strong" && d24.low === true, "rating, band and few-calls flag are kept", JSON.stringify(d24 || {}).slice(0, 200));
 ok(st2.some(c => c.date === "2026-11-21" && c.rating === 7.2), "a weekend range is stored under its first day");
 
+// Full day bundle in the artifact's format, and what each person gets back
+const bundle = { funnel: [{ stage: "Recordings", calls: 30 }], reps: [{ person: "mudassir", rating: 7.2, band: "Strong", conversations: 4 }, { person: "Sharukh", rating: 4.0, band: "Needs coaching", conversations: 9 }],
+  feedback: [{ person: "mudassir", kind: "Does well", point: "Clear pricing." }, { person: "Sharukh", kind: "Needs improvement", point: "Ask about AUM." }],
+  outcomes: [{ person: "mudassir", outcome: "Demo booked", calls: 1 }], actions: [], concerns: [{ theme: "Price", mentions: 3, handled_weakly: 1 }], flags: [], issues: [], history: [{ date: "2026-11-26", recordings: 30 }],
+  rep_history: [{ date: "2026-11-25", person: "mudassir", rating: 6.1 }, { date: "2026-11-26", person: "Sharukh", rating: 4.0 }] };
+r = await act(tokA, { action: "scorecard", date: "2026-11-26", bundle });
+ok(r.status === 200 && r.body.imported === 2, "a full day bundle imports and also feeds the call rows", r.status + " " + JSON.stringify(r.body));
+r = await act(tokA, { action: "scget" });
+ok(r.status === 200 && r.body.date === "2026-11-26" && r.body.data.reps.length === 2 && r.body.data.concerns.length === 1 && r.body.data.reps.every(x => x.uid), "admin gets the whole day with people matched", JSON.stringify(r.body).slice(0, 200));
+r = await act(tokR, { action: "scget" });
+ok(r.status === 200 && r.body.mine === true && r.body.data.reps.length === 1 && r.body.data.reps[0].uid === "u-rm1" && r.body.data.feedback.length === 1 && r.body.data.concerns.length === 0 && r.body.data.rep_history.length === 1, "an RM gets only their own rows and no team sections", JSON.stringify(r.body.data || {}).slice(0, 200));
+
+// Sold clients from the Onboarding sheet keep their own date and instalments
+r = await act(tokR, { action: "soldimport", id: "o1", total: 11800, pays: [{ d: "2026-06-01", a: 5900 }] });
+ok(r.status === 403, "an RM cannot import sold clients", r.status);
+updates = [];
+r = await act(tokA, { action: "soldimport", id: "o1", total: 11800, date: "2026-04-02", products: "Platform, Wylth AI", rm: "u-rm2", pays: [{ d: "2026-06-01", a: 5900, note: "UPI" }, { d: "2026-04-02", a: 5900 }] });
+ok(r.status === 200 && r.body.sold.date === "2026-04-02" && r.body.pay.paid === 11800 && r.body.pay.hist.length === 2 && r.body.pay.hist[0].d === "2026-04-02", "sold import keeps the onboarding date and each instalment date", r.status + " " + JSON.stringify(r.body).slice(0, 220));
+ok(updates.some(u => u.body.status === "won" && u.body.monetaryValue === 11800 && u.body.assignedTo === "u-rm2"), "the lead is marked won for the full amount and given to the sheet RM", JSON.stringify(updates.map(u => u.body.status)));
+ok(JSON.parse(kv.get("cfg")).soldDates.o1 === "2026-04-02" && JSON.parse(kv.get("cfg")).users["admin@example.com"].role === "admin", "the sold date is saved and the rest of the config is kept", kv.get("cfg").slice(0, 160));
+
 // Feed route used by the daily report job
 const { handle } = await import(repo + "/src/core.js?" + Date.now());
 env.SCORECARD_FEED_KEY = "feed-key-feed-key-1234"; env.SCORECARD_ADMIN_EMAIL = "admin@example.com";
