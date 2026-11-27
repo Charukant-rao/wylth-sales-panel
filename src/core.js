@@ -7,6 +7,7 @@ import { timingSafeEqual } from "node:crypto";
 import worker from "./worker.js";
 import { msLogin, msCallback, sessionForEmail } from "./ms-auth.js";
 import { peLookup } from "./pe-tracker.js";
+import { syncDistributors } from "./distributors.js";
 
 export function blobStore(container) {
   const name = k => encodeURIComponent(k);
@@ -69,7 +70,9 @@ export async function handle(env, method, url, headers, bodyBuf) {
     const m = await env.PANEL_KV.get("snap:v1", "json").catch(() => null), b = await env.PANEL_KV.get("snapb:v1", "text").catch(() => null);
     let prog = null; if (b) { try { const x = JSON.parse(b); prog = { rows: (x.rows || []).length, pipeline: (x.pi || 0) + "/" + ((x.pls || []).length) }; } catch { prog = "unreadable"; } }
     const dg = await env.PANEL_KV.get("snapdiag", "json").catch(() => null);
-    const o = { ok: true, now: new Date().toISOString(), snapshot: m ? { leads: m.n, syncedAt: new Date(m.at).toISOString(), fullBuild: m.full } : null, building: !!b, progress: prog, lastSync: dg ? Object.assign({}, dg, { at: new Date(dg.at).toISOString() }) : null, mirroring: !!env.MIGRATE_FROM, lastMirror: lastMirror ? new Date(lastMirror).toISOString() : null };
+    const ms = await env.PANEL_KV.get("mfdsrc", "json").catch(() => null);
+    const o = { ok: true, now: new Date().toISOString(), snapshot: m ? { leads: m.n, syncedAt: new Date(m.at).toISOString(), fullBuild: m.full } : null, building: !!b, progress: prog, lastSync: dg ? Object.assign({}, dg, { at: new Date(dg.at).toISOString() }) : null, mirroring: !!env.MIGRATE_FROM, lastMirror: lastMirror ? new Date(lastMirror).toISOString() : null,
+      distributorList: ms ? { file: ms.blob, arns: ms.rows || 0, importedAt: ms.at ? new Date(ms.at).toISOString() : null, importing: !!(ms.busy && Date.now() - ms.busy < 15 * 60 * 1000), error: ms.error || null } : null };
     return { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" }, body: Buffer.from(JSON.stringify(o)) };
   }
   if (u.pathname === "/api/feed/scorecard" && method === "POST") return scorecardFeed(env, u, headers, bodyBuf);
@@ -122,4 +125,6 @@ export async function sync(env, log) {
   const dg = await env.PANEL_KV.get("snapdiag", "json").catch(() => null);
   if (mErr) await env.PANEL_KV.put("snapdiag", JSON.stringify({ at: Date.now(), ok: false, err: mErr, ms: Date.now() - t0 }));
   else if (!dg || dg.at < t0) await env.PANEL_KV.put("snapdiag", JSON.stringify({ at: Date.now(), ok: true, ms: Date.now() - t0 }));
+  // AMFI Distributor List in Azure Blob → MFD list; only does work when the file has changed
+  try { const d = await syncDistributors(env, log); if (!d.unchanged) log("distributors", d); } catch (e) { log("distributor import failed", e.message); }
 }
