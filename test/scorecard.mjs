@@ -50,6 +50,17 @@ ok(r.status === 400, "Not interested needs a reason", r.status + " " + (r.body.e
 updates = [];
 r = await act(tokR, { action: "call", id: "o1", outcome: "Not interested", note: "Happy with current software" });
 ok(r.status === 200 && r.body.pooled === true && updates.some(u => u.body.assignedTo === ""), "Not interested with a reason returns the lead to the pool", r.status + " " + JSON.stringify(updates.map(u => Object.keys(u.body))));
+// Several days at once, with the rating out of 10
+r = await act(tokA, { action: "scorecard", days: [
+  { date: "2026-11-20", reps: [{ person: "Mudassir", rating: 6.5, conversations: 7 }, { person: "Sharukh", rating: 4.1, conversations: 3 }] },
+  { date: "2026-11-21\u201322", reps: [{ person: "Mudassir", rating: 7.2, conversations: 5 }] },
+  { date: "2026-11-24", reps: [{ person: "Mudassir", rating: 8.4, band: "Strong", low_sample: true, recordings: 9, conversations: 6, avg_score: 3.1 }] }] });
+ok(r.status === 200 && r.body.imported === 4, "several days import in one call (date ranges use the first day)", r.status + " " + JSON.stringify(r.body));
+const st2 = JSON.parse([...kv.entries()].find(([k]) => /rep|call/i.test(k) && k !== "lmeta")?.[1] || "{}").calls.rows;
+const d24 = st2.find(c => c.date === "2026-11-24");
+ok(d24 && d24.rating === 8.4 && d24.band === "Strong" && d24.low === true, "rating, band and few-calls flag are kept", JSON.stringify(d24 || {}).slice(0, 200));
+ok(st2.some(c => c.date === "2026-11-21" && c.rating === 7.2), "a weekend range is stored under its first day");
+
 // Feed route used by the daily report job
 const { handle } = await import(repo + "/src/core.js?" + Date.now());
 env.SCORECARD_FEED_KEY = "feed-key-feed-key-1234"; env.SCORECARD_ADMIN_EMAIL = "admin@example.com";
